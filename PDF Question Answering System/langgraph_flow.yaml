@@ -1,0 +1,75 @@
+# LangGraph workflow definition
+name: PDF Assistant Workflow
+description: Process and query PDF documents using LangChain and Claude
+
+nodes:
+  - id: document_loader
+    type: tool
+    description: Loads PDF documents from the docs directory
+    source: langchain_community.document_loaders:PyPDFLoader
+
+  - id: text_splitter
+    type: tool
+    description: Splits documents into manageable chunks
+    source: langchain.text_splitter:RecursiveCharacterTextSplitter
+    config:
+      chunk_size: 1000
+      chunk_overlap: 200
+
+  - id: embeddings
+    type: tool
+    description: Creates embeddings using Hugging Face
+    source: langchain_huggingface:HuggingFaceEmbeddings
+    config:
+      model_name: sentence-transformers/all-MiniLM-L6-v2
+
+  - id: vector_store
+    type: tool
+    description: Stores and retrieves document embeddings
+    source: langchain_chroma:Chroma
+    config:
+      collection_name: pdf_assistant
+      persist_directory: data/chroma_db
+
+  - id: llm
+    type: tool
+    description: Claude model for generating responses
+    source: langchain_anthropic:ChatAnthropic
+    config:
+      model: claude-3-sonnet-20240229
+      temperature: 0.2
+      max_tokens_to_sample: 1000
+
+  - id: qa_chain
+    type: chain
+    description: Conversational retrieval chain
+    source: langchain.chains:ConversationalRetrievalChain
+
+edges:
+  - from: document_loader
+    to: text_splitter
+  - from: text_splitter
+    to: vector_store
+  - from: vector_store
+    to: qa_chain
+  - from: embeddings
+    to: vector_store
+  - from: llm
+    to: qa_chain
+
+workflows:
+  - id: ingest
+    description: Ingest PDFs and create vector database
+    steps:
+      - document_loader
+      - text_splitter
+      - embeddings
+      - vector_store
+  
+  - id: query
+    description: Interactive query system
+    steps:
+      - embeddings
+      - vector_store
+      - llm
+      - qa_chain
